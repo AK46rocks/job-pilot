@@ -1,0 +1,32 @@
+{
+  "_note": "Tokens found from live search on 11 Nov 2026. profile/search.json still filters by title and location, so global companies only return their UK roles.",
+  "greenhouse": [
+    "autotrader",
+    "speechify",
+    "Roku",
+    "addepar1",
+    "fanaticsfbg",
+    "mthreerecruitingportal",
+    "onestream"
+  ],
+  "lever": [
+    "matillion",
+    "zopa",
+    "moonpig",
+    "scottlogic",
+    "octoenergy",
+    "tsmg",
+    "jumpcloud",
+    "ajax"
+  ],
+  "ashby": [
+    "seccl",
+    "trainline",
+    "ashby",
+    "Mastra",
+    "edra",
+    "ameba",
+    "vega",
+    "elevenlabs"
+  ]
+}
