@@ -299,10 +299,12 @@ $("cv-form").onsubmit = async (e) => {
       box.append(el("div", { className: "msg", style: "margin-top:0", textContent: `Eligibility check: this description mentions ${r.flags.join(", ")}. Roles needing clearance, long UK residency, US work authorisation or Principal/Staff seniority are normally skipped.` }), el("div", { className: "row" }, go));
       return;
     }
+    // an older server that is still running does not know about AI tailor or warnings
+    if (useAi && r.ai === undefined) { box.hidden = true; throw new Error("The server is running an older version of the code. Stop it (Ctrl+C), run npm run ui again, then retry AI tailor."); }
     current.cv = r.cv; current.notes = r.notes;
     box.append(el("div", { className: "score", textContent: `${r.score}% keyword match${r.ai ? " · AI tailored" : ""}` }), el("div", { className: "meta", textContent: `${r.title}${r.font ? ` · 1 page at ${r.font}` : ""}` }));
-    for (const w of r.warnings) box.append(el("div", { className: "msg", textContent: w }));
-    if (r.flags.length) box.append(el("div", { className: "msg", textContent: `Check eligibility before applying. The description mentions: ${r.flags.join(", ")}.` }));
+    for (const w of r.warnings ?? []) box.append(el("div", { className: "msg", textContent: w }));
+    if (r.flags?.length) box.append(el("div", { className: "msg", textContent: `Check eligibility before applying. The description mentions: ${r.flags.join(", ")}.` }));
     const terms = (label, items, cls) => { if (!items.length) return; const t = el("div", { className: "terms" }); for (const x of items) t.append(el("span", { className: `badge ${cls}`, textContent: x })); box.append(el("h4", { textContent: label }), t); };
     if (r.report) box.append(el("h4", { textContent: "Claude's report" }), el("div", { className: "report", textContent: r.report }));
     terms("In your CV", r.matched, "ok"); terms("In the job description but not in your master CV", r.missing, "warn");

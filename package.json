@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "ui": "tsx src/server.ts",
+    "ui": "tsx watch --clear-screen=false src/server.ts",
     "fetch-jobs": "tsx src/fetchJobs.ts",
     "track": "tsx src/tracker.ts",
     "cv": "node cv/gen.cjs",
