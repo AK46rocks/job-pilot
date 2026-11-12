@@ -81,6 +81,7 @@
   .dlg .row .grow { flex: 1; }
   .result { margin-top: 16px; padding: 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
   .result h4 { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+  .report { white-space: pre-wrap; font-size: 13.5px; max-height: 220px; overflow: auto; }
   .score { font-size: 22px; font-weight: 700; }
   .terms { display: flex; flex-wrap: wrap; gap: 5px; }
   .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 14px; }
@@ -166,8 +167,10 @@
       <button class="btn link" type="button" id="use-fetched" hidden>Use the description from the job board</button>
       <span class="grow"></span>
       <button class="btn" type="button" id="cv-close">Close</button>
+      <button class="btn" type="submit" id="cv-ai" title="Runs Claude Code on your machine with the tailor-cv skill. Uses your Claude tokens and takes a few minutes.">AI tailor ✦</button>
       <button class="btn primary" type="submit" id="cv-submit">Generate CV</button>
     </div>
+    <p class="hint"><b>Generate CV</b> is instant and uses rules. <b>AI tailor</b> runs Claude Code with your tailor-cv skill to also rewrite bullets in the job's wording. It uses your Claude tokens and takes 2 to 5 minutes.</p>
     <div class="msg" id="cv-error" hidden></div>
     <div class="result" id="cv-result" hidden></div>
   </form>
@@ -279,14 +282,16 @@ function openCv(j) {
 $("cv-close").onclick = () => $("cv-dialog").close();
 $("use-fetched").onclick = async () => { try { $("jd").value = (await api(`/api/description?id=${encodeURIComponent(current.id)}`)).description; } catch (e) { showCvError(e.message); } };
 const showCvError = (m) => { $("cv-error").textContent = m; $("cv-error").hidden = false; };
-let force = false;
+let force = false, useAi = false;
 $("cv-form").onsubmit = async (e) => {
   e.preventDefault();
   const forced = force; force = false;
-  const btn = $("cv-submit"); btn.disabled = true; btn.textContent = "Building the PDF, about 20 seconds...";
+  if (e.submitter) useAi = e.submitter.id === "cv-ai"; // "Build anyway" resubmits with the same choice
+  const btn = $(useAi ? "cv-ai" : "cv-submit"), other = $(useAi ? "cv-submit" : "cv-ai"), label = btn.textContent;
+  btn.disabled = other.disabled = true; btn.textContent = useAi ? "Claude is tailoring, 2 to 5 minutes..." : "Building the PDF, about 20 seconds...";
   $("cv-error").hidden = true; $("cv-result").hidden = true;
   try {
-    const r = await api("/api/cv", { job: current, jd: $("jd").value, force: forced });
+    const r = await api("/api/cv", { job: current, jd: $("jd").value, force: forced, ai: useAi });
     const box = $("cv-result"); box.replaceChildren(); box.hidden = false;
     if (r.needsConfirm) {
       const go = el("button", { className: "btn", type: "button", textContent: "Build the CV anyway" });
@@ -295,17 +300,18 @@ $("cv-form").onsubmit = async (e) => {
       return;
     }
     current.cv = r.cv; current.notes = r.notes;
-    box.append(el("div", { className: "score", textContent: `${r.score}% keyword match` }), el("div", { className: "meta", textContent: `${r.title}${r.font ? ` · 1 page at ${r.font}` : ""}` }));
+    box.append(el("div", { className: "score", textContent: `${r.score}% keyword match${r.ai ? " · AI tailored" : ""}` }), el("div", { className: "meta", textContent: `${r.title}${r.font ? ` · 1 page at ${r.font}` : ""}` }));
     for (const w of r.warnings) box.append(el("div", { className: "msg", textContent: w }));
     if (r.flags.length) box.append(el("div", { className: "msg", textContent: `Check eligibility before applying. The description mentions: ${r.flags.join(", ")}.` }));
     const terms = (label, items, cls) => { if (!items.length) return; const t = el("div", { className: "terms" }); for (const x of items) t.append(el("span", { className: `badge ${cls}`, textContent: x })); box.append(el("h4", { textContent: label }), t); };
+    if (r.report) box.append(el("h4", { textContent: "Claude's report" }), el("div", { className: "report", textContent: r.report }));
     terms("In your CV", r.matched, "ok"); terms("In the job description but not in your master CV", r.missing, "warn");
     const row = el("div", { className: "row" });
     row.append(el("a", { className: "btn primary", href: r.cv, target: "_blank", textContent: "Open CV PDF" }), el("a", { className: "btn", href: safeUrl(current.url), target: "_blank", rel: "noopener noreferrer", textContent: "Open job link ↗" }), el("span", { className: "meta", textContent: `Saved in ${r.folder}` }));
     box.append(row);
     render(); loadApps();
   } catch (err) { showCvError(err.message); }
-  finally { btn.disabled = false; btn.textContent = "Generate CV"; }
+  finally { btn.disabled = other.disabled = false; btn.textContent = label; }
 };
 
 // ---------- applied tab ----------

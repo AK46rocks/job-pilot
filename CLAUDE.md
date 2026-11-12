@@ -55,7 +55,7 @@ Token rules for /batch: no browser, no long explanations, do not print whole fil
 9. **Log it.** Run `npm run track -- add "<Company>" "<Role>" "<URL>" drafted "<match score and gaps>" "output/<company>/<cv file>.pdf"`. When Aditya says he submitted, run `npm run track -- status "<URL>" submitted`.
 
 ## Web UI (Aditya runs it himself)
-`npm run ui` serves ui/index.html from src/server.ts at http://localhost:4173. It searches by UK location, builds rule-based CVs into output/ui/<company>-<role>/ (same files as a /batch folder, so `npm run build -- <folder>` works on them) and marks applications in data/applications.json. A job with status "drafted" is still listed, any later status hides it from the UI and from `npm run fetch-jobs`.
+`npm run ui` serves ui/index.html from src/server.ts at http://localhost:4173. It searches by UK location, builds rule-based CVs into output/ui/<company>-<role>/ (same files as a /batch folder, so `npm run build -- <folder>` works on them) and marks applications in data/applications.json. Its "AI tailor" button runs `claude -p` headless on one output/ui folder: follow the prompt it gives, use the tailor-cv skill, edit only that folder and never ask questions (put them in notes.md). A job with status "drafted" is still listed, any later status hides it from the UI and from `npm run fetch-jobs`.
 
 ## Workflow: /tracker
 Run `npm run track -- list` and summarise by status.
