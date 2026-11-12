@@ -10,6 +10,7 @@ You help Aditya apply for UK software jobs. You find roles, tailor his CV and co
 5. **Never create accounts or enter passwords.** If a site needs sign-in, pause and let Aditya sign in in the browser window (the browser profile in ./.browser-profile keeps him signed in next time).
 6. **Flag and skip** roles that need security clearance (SC, DV, eDV, BPSS plus SC), 5 years of UK residency, US work authorisation, or 6+ years for Principal/Staff roles. Say why and move on unless Aditya insists.
 7. Follow profile/writing_rules.md for every CV, cover letter and written answer.
+8. Use the tailor-cv skill (.claude/skills/tailor-cv/SKILL.md) for every CV you generate or refine, including in /batch and /apply.
 
 ## Workflow: /find-jobs
 1. Run `npm run fetch-jobs`.

@@ -14,11 +14,11 @@ export const loadCompanies = () => {
 const strip = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/&[a-z#0-9]+;/gi, " ").replace(/\s+/g, " ").trim();
 const uniq = (a: (string | undefined | null)[]) => [...new Set(a.map((x) => (x ?? "").trim()).filter(Boolean))];
 
-async function getJson<T>(url: string, errors?: string[]): Promise<T | null> {
+async function getJson<T>(url: string, errors?: string[], headers: Record<string, string> = {}): Promise<T | null> {
   const label = url.replace(/app_(id|key)=[^&]+/g, "app_$1=***");
   const fail = (m: string) => { console.warn(`  ${m}`); errors?.push(m); return null; };
   try {
-    const res = await fetch(url, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(20000) });
+    const res = await fetch(url, { headers: { Accept: "application/json", ...headers }, signal: AbortSignal.timeout(20000) });
     if (!res.ok) return fail(`${res.status} ${label}`);
     return (await res.json()) as T;
   } catch (e) { return fail(`failed ${label}: ${(e as Error).message}`); }
@@ -64,6 +64,29 @@ export async function adzuna(location: string, keywords: string[], maxAgeDays: n
   return [...seen.values()];
 }
 
+// ---------- Reed (optional) ----------
+export const reedKey = () => process.env.REED_API_KEY || null;
+const ukDate = (d?: string) => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(d ?? ""); return m ? new Date(`${m[3]}-${m[2]}-${m[1]}T12:00:00Z`).toISOString() : undefined; };
+
+// One request per field keyword, within 15 miles of the location. The API key is the Basic auth user name.
+export async function reed(location: string, keywords: string[], errors?: string[]): Promise<Job[]> {
+  const key = reedKey();
+  if (!key) return [];
+  const auth = { Authorization: `Basic ${Buffer.from(`${key}:`).toString("base64")}` };
+  const phrases = uniq(keywords.map((w) => w.toLowerCase().replace(/-/g, " "))).slice(0, 8);
+  const seen = new Map<string, Job>();
+  for (const phrase of phrases) {
+    const q = new URLSearchParams({ keywords: phrase, resultsToTake: "100" });
+    if (location && !isUkWide(location)) { q.set("locationName", location); q.set("distanceFromLocation", "15"); }
+    const d = await getJson<{ results: any[] }>(`https://www.reed.co.uk/api/1.0/search?${q}`, errors, auth);
+    for (const r of d?.results ?? []) {
+      if (!r?.jobId || !r.jobUrl) continue;
+      seen.set(String(r.jobId), { id: `rd-${r.jobId}`, source: "reed", company: r.employerName ?? "Unknown company", title: strip(String(r.jobTitle ?? "")), location: r.locationName ?? location, url: r.jobUrl, updated: ukDate(r.date), description: strip(String(r.jobDescription ?? "")), flags: [] });
+    }
+  }
+  return [...seen.values()];
+}
+
 // ---------- Matching ----------
 export const UK_PLACES = ["London", "Birmingham", "Coventry", "Manchester", "Leeds", "Bristol", "Edinburgh", "Glasgow", "Cambridge", "Oxford", "Leamington Spa", "Warwick", "Nottingham", "Leicester", "Sheffield", "Liverpool", "Newcastle", "Cardiff", "Belfast", "Reading", "Milton Keynes", "Southampton", "Brighton", "Bath", "York", "Derby", "Wolverhampton", "Solihull", "Northampton", "Norwich", "Exeter", "Aberdeen", "Swindon", "Cheltenham", "Guildford", "Slough"];
 const word = (s: string) => new RegExp(`(^|[^a-z])${s.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "[\\s-]+")}($|[^a-z])`);
@@ -93,4 +116,7 @@ export function matchesLocation(job: Job, query: string, includeRemote: boolean)
 
 export const matchesTitle = (job: Job, keywords: string[]) => { const t = job.title.toLowerCase(); return keywords.some((k) => t.includes(k.toLowerCase())); };
 export const isRecent = (job: Job, maxAgeDays: number) => !job.updated || Date.now() - new Date(job.updated).getTime() <= maxAgeDays * 864e5;
+// Seniority words only count when they are in the job title ("reports to the Director of Engineering" is fine).
+const TITLE_ONLY = new Set(["principal", "staff engineer", "staff", "head of", "director"]);
+export const eligibilityFlags = (title: string, text: string, exclude: string[]) => { const t = title.toLowerCase(), all = `${t} ${text.toLowerCase()}`; return exclude.filter((k) => (TITLE_ONLY.has(k) ? t : all).includes(k)); };
 export const flagsFor = (text: string, exclude: string[]) => { const t = text.toLowerCase(); return exclude.filter((k) => t.includes(k)); };

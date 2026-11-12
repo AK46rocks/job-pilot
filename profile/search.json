@@ -1,6 +1,6 @@
 {
   "titleKeywords": ["full stack", "full-stack", "frontend", "front end", "front-end", "software engineer", "react", "ai engineer", "typescript"],
   "locationKeywords": ["uk", "united kingdom", "london", "birmingham", "coventry", "manchester", "leamington", "remote"],
-  "excludeKeywords": ["security clearance", "sc clearance", "dv clearance", "edv", "bpss and sc", "5 years continuous uk", "us citizen", "principal", "staff engineer", "head of", "director"],
+  "excludeKeywords": ["security clearance", "sc clearance", "dv clearance", "edv", "bpss and sc", "5 years continuous uk", "us citizen", "principal", "staff engineer", "head of", "director", "nppv", "security cleared", "developed vetting", "us work authorization", "us work authorisation"],
   "maxAgeDays": 21
 }

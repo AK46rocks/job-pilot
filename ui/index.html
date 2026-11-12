@@ -37,6 +37,12 @@
   details.kw { margin-top: 12px; font-size: 14px; }
   details.kw summary { cursor: pointer; color: var(--muted); }
   details.kw input { margin-top: 8px; }
+  .addjob { margin-top: 10px; padding: 12px 16px; }
+  .addjob summary { cursor: pointer; font-weight: 600; }
+  .addjob .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; align-items: end; }
+  .addjob .wide { grid-column: 1 / -1; }
+  .addjob .end { text-align: right; }
+  @media (max-width: 640px) { .addjob .grid { grid-template-columns: 1fr; } }
   .hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
   .status { margin: 18px 2px 10px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
   .status strong { color: var(--ink); }
@@ -102,7 +108,7 @@
       <div class="search">
         <div>
           <label class="f" for="location">Location in the UK</label>
-          <input type="text" id="location" list="places" placeholder="Coventry, London, Manchester... or UK for everywhere" autocomplete="off">
+          <input type="text" id="location" list="places" placeholder="Coventry, London, Manchester... leave empty for the whole UK" autocomplete="off">
           <datalist id="places"></datalist>
         </div>
         <button class="btn primary" id="search-btn" type="submit">Search jobs</button>
@@ -119,6 +125,20 @@
       </details>
       <p class="hint" id="source-hint"></p>
     </form>
+
+    <details class="card addjob" id="add-box">
+      <summary>Add a job by link (LinkedIn, Indeed or anywhere else)</summary>
+      <form id="add-form">
+        <div class="grid">
+          <div class="wide"><label class="f" for="add-url">Job link</label><input type="text" id="add-url" placeholder="https://..." required></div>
+          <div><label class="f" for="add-company">Company</label><input type="text" id="add-company" required></div>
+          <div><label class="f" for="add-title">Job title</label><input type="text" id="add-title" required></div>
+          <div><label class="f" for="add-location">Location (optional)</label><input type="text" id="add-location"></div>
+          <div class="end"><button class="btn primary" type="submit">Add to my list</button></div>
+        </div>
+        <p class="hint">The link is only saved, nothing is fetched from it. The job stays at the top of your list until you mark it applied or remove it.</p>
+      </form>
+    </details>
 
     <div class="status" id="status" aria-live="polite"></div>
     <div class="chips" id="companies"></div>
@@ -242,6 +262,7 @@ function jobCard(j) {
     render();
   };
   actions.append(gen, el("label", { className: "check" }, box, "Applied"));
+  if (j.manual) { const rm = el("button", { className: "btn link", type: "button", textContent: "Remove" }); rm.onclick = async () => { try { await api("/api/jobs/remove", { id: j.id }); state.jobs = state.jobs.filter((x) => x !== j); render(); } catch (e) { toast(e.message); } }; actions.append(rm); }
   card.append(info, actions);
   return card;
 }
@@ -258,15 +279,24 @@ function openCv(j) {
 $("cv-close").onclick = () => $("cv-dialog").close();
 $("use-fetched").onclick = async () => { try { $("jd").value = (await api(`/api/description?id=${encodeURIComponent(current.id)}`)).description; } catch (e) { showCvError(e.message); } };
 const showCvError = (m) => { $("cv-error").textContent = m; $("cv-error").hidden = false; };
+let force = false;
 $("cv-form").onsubmit = async (e) => {
   e.preventDefault();
+  const forced = force; force = false;
   const btn = $("cv-submit"); btn.disabled = true; btn.textContent = "Building the PDF, about 20 seconds...";
   $("cv-error").hidden = true; $("cv-result").hidden = true;
   try {
-    const r = await api("/api/cv", { job: current, jd: $("jd").value });
-    current.cv = r.cv; current.notes = r.notes;
+    const r = await api("/api/cv", { job: current, jd: $("jd").value, force: forced });
     const box = $("cv-result"); box.replaceChildren(); box.hidden = false;
-    box.append(el("div", { className: "score", textContent: `${r.score}% keyword match` }), el("div", { className: "meta", textContent: r.title }));
+    if (r.needsConfirm) {
+      const go = el("button", { className: "btn", type: "button", textContent: "Build the CV anyway" });
+      go.onclick = () => { force = true; $("cv-form").requestSubmit(); };
+      box.append(el("div", { className: "msg", style: "margin-top:0", textContent: `Eligibility check: this description mentions ${r.flags.join(", ")}. Roles needing clearance, long UK residency, US work authorisation or Principal/Staff seniority are normally skipped.` }), el("div", { className: "row" }, go));
+      return;
+    }
+    current.cv = r.cv; current.notes = r.notes;
+    box.append(el("div", { className: "score", textContent: `${r.score}% keyword match` }), el("div", { className: "meta", textContent: `${r.title}${r.font ? ` · 1 page at ${r.font}` : ""}` }));
+    for (const w of r.warnings) box.append(el("div", { className: "msg", textContent: w }));
     if (r.flags.length) box.append(el("div", { className: "msg", textContent: `Check eligibility before applying. The description mentions: ${r.flags.join(", ")}.` }));
     const terms = (label, items, cls) => { if (!items.length) return; const t = el("div", { className: "terms" }); for (const x of items) t.append(el("span", { className: `badge ${cls}`, textContent: x })); box.append(el("h4", { textContent: label }), t); };
     terms("In your CV", r.matched, "ok"); terms("In the job description but not in your master CV", r.missing, "warn");
@@ -303,6 +333,13 @@ $("tab-find").onclick = () => show(true); $("tab-applied").onclick = () => show(
 $("search-form").onsubmit = (e) => { e.preventDefault(); runSearch(false); };
 $("refresh-btn").onclick = () => runSearch(true);
 $("hide-flagged").onchange = render;
+$("add-form").onsubmit = async (e) => {
+  e.preventDefault();
+  try {
+    await api("/api/jobs", { url: $("add-url").value, company: $("add-company").value, title: $("add-title").value, location: $("add-location").value });
+    e.target.reset(); $("add-box").open = false; toast("Added to the top of your list."); runSearch(false);
+  } catch (err) { toast(err.message); }
+};
 
 (async () => {
   $("location").value = store.get("jp.location", ""); $("remote").checked = store.get("jp.remote", "1") === "1";
@@ -311,12 +348,13 @@ $("hide-flagged").onchange = render;
     state.defaults = c.titleKeywords.map((k) => k.toLowerCase());
     $("keywords").value = store.get("jp.keywords", "") || c.titleKeywords.join(", ");
     for (const p of ["UK", ...c.places]) $("places").append(el("option", { value: p }));
-    $("source-hint").textContent = c.adzuna
-      ? `Searching ${c.boards} company boards from companies.json plus Adzuna for other companies near the location.`
-      : `Searching the ${c.boards} company boards in companies.json. To also discover other companies near any UK town, add free Adzuna keys to a .env file (see README).`;
+    const extra = [c.reed && "Reed", c.adzuna && "Adzuna"].filter(Boolean);
+    $("source-hint").textContent = extra.length
+      ? `Searching ${c.boards} company boards from companies.json plus ${extra.join(" and ")} for other companies near the location.`
+      : `Searching the ${c.boards} company boards in companies.json. To also discover other companies near any UK town, add a free Reed or Adzuna key to a .env file (see README).`;
   } catch (e) { $("source-hint").textContent = e.message; }
   loadApps();
-  if ($("location").value) runSearch(false);
+  runSearch(false);
 })();
 </script>
 </body>

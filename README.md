@@ -34,14 +34,16 @@ It finds roles, tailors your CV, fills the application form and logs it. **You a
 
 Where the roles come from:
 - Always: the Greenhouse, Lever and Ashby boards in `companies.json`, filtered to the location you typed. Add more board tokens to cover more companies.
-- Optional, to discover other companies near any UK town: get a free key at developer.adzuna.com and create a `.env` file in this folder:
+- Optional, to discover other companies near any UK town: create a `.env` file in this folder with a free Reed key (reed.co.uk/developers), free Adzuna keys (developer.adzuna.com), or both:
   ```
+  REED_API_KEY=your_key
   ADZUNA_APP_ID=your_id
   ADZUNA_APP_KEY=your_key
   ```
-  Adzuna only gives a short snippet of each description, which is why Generate CV asks you to paste the full text.
+  Both only give a short snippet of each description, which is why Generate CV asks you to paste the full text.
+- **Add a job by link**: for a posting you found yourself (LinkedIn, Indeed, a company site), open "Add a job by link", paste the URL, company and title. It stays at the top of the list with the same Generate CV and Applied buttons. LinkedIn and Indeed are never fetched or automated.
 
-The UI tailors by rules, not AI: it keeps the bullets, skills and profile sentences from `cv/master_cv.json` that best match the pasted description and never writes new text. It saves the same `tailor.json` that `/batch` uses, so you can ask Claude Code to refine any folder afterwards. "My field" keywords, the skip flags and the maximum posting age come from `profile/search.json`.
+The UI tailors by rules, not AI. It applies the parts of `.claude/skills/tailor-cv/SKILL.md` that rules can do: eligibility check before building, exact JD spelling with the usual spelling once in Skills, title and profile format, the most relevant and quantified bullets first, one page filled as far as it goes. It only uses text from `cv/master_cv.json` plus the skill's confirmed extras, and never writes new sentences. It saves the same `tailor.json` that `/batch` uses, so for bullet rewrites and reframing you can ask Claude Code: "refine output/ui/<folder> with the tailor-cv skill". "My field" keywords, the skip flags and the maximum posting age come from `profile/search.json`.
 
 ### Recommended: batch mode (cheap and fast)
 1. `npm run fetch-jobs` (no tokens) to see matching roles and their ids.

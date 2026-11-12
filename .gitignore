@@ -4,3 +4,4 @@ data/
 output/
 profile/candidate.json
 .env
+.DS_Store

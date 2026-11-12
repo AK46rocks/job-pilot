@@ -4,6 +4,7 @@
 //   "drop": ["0.5","0.12"],            // ids from `npm run bullets` to remove (bullets, projects, skills lines)
 //   "edit": { "0.4": "new bullet text" } // rewrite specific lines with exact JD keywords (facts must stay true)
 //   "skills": [["Frontend","React.js, ..."]] // optional: replaces the Skills section
+//   "order": ["0.8","0.3"]              // optional: bullets listed here move up within their own block, in this order
 // }
 import { readFileSync, writeFileSync, existsSync, readdirSync } from "node:fs";
 import { execSync } from "node:child_process";
@@ -27,11 +28,20 @@ const out = `${dir}/Aditya_Kundurkar_CV_${company}`;
 
 m.out = out; if (t.title) m.title = t.title; if (t.profile) m.profile = t.profile; if (t.rtw) m.rtw = t.rtw;
 m.sections = m.sections.map((s: any, si: number) => {
-  let items = s.items.map((it: any[], ii: number) => {
+  const rank = (ii: number) => { const r = (t.order ?? []).indexOf(`${si}.${ii}`); return r < 0 ? Infinity : r; };
+  const kept = s.items.map((it: any[], ii: number) => {
     const id = `${si}.${ii}`;
-    if (t.edit?.[id] !== undefined) { const c = [...it]; c[it[0] === "s" ? 2 : 1] = t.edit[id]; return c; }
-    return it;
-  }).filter((_: any, ii: number) => !drop.has(`${si}.${ii}`));
+    if (t.edit?.[id] !== undefined) { const c = [...it]; c[it[0] === "s" ? 2 : 1] = t.edit[id]; return { it: c, ii }; }
+    return { it, ii };
+  }).filter((x: any) => !drop.has(`${si}.${x.ii}`));
+  // reorder bullets inside each run of consecutive bullets (one role or project), never across headings
+  for (let a = 0; a < kept.length; ) {
+    if (kept[a].it[0] !== "b") { a++; continue; }
+    let b = a; while (b < kept.length && kept[b].it[0] === "b") b++;
+    kept.splice(a, b - a, ...kept.slice(a, b).sort((x: any, y: any) => (rank(x.ii) === rank(y.ii) ? x.ii - y.ii : rank(x.ii) - rank(y.ii))));
+    a = b;
+  }
+  let items = kept.map((x: any) => x.it);
   if (s.name === "Skills" && Array.isArray(t.skills)) items = t.skills.map((x: string[]) => ["s", x[0], x[1]]);
   return { ...s, items };
 }).filter((s: any) => s.items.length);

@@ -5,7 +5,8 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, statSync } from "node:fs";
 import { spawn } from "node:child_process";
 import { resolve, sep, extname } from "node:path";
-import { fetchBoards, adzuna, adzunaKeys, loadSearch, loadCompanies, matchesLocation, matchesTitle, isRecent, flagsFor, isUkWide, UK_PLACES, type Job } from "./jobs.js";
+import { createHash } from "node:crypto";
+import { fetchBoards, adzuna, adzunaKeys, reed, reedKey, loadSearch, loadCompanies, matchesLocation, matchesTitle, isRecent, eligibilityFlags, isUkWide, UK_PLACES, type Job } from "./jobs.js";
 import { loadApps, saveApps, findApp, isApplied, today } from "./applications.js";
 import { autoTailor } from "./tailor.js";
 import { keywordsMd } from "./keywords.js";
@@ -27,6 +28,21 @@ async function cached(key: string, refresh: boolean, load: (errors: string[]) =>
   return entry;
 }
 
+// ---------- jobs added by hand (a LinkedIn or Indeed posting, for example) ----------
+const MANUAL = "data/manual_jobs.json";
+const loadManual = (): Job[] => (existsSync(MANUAL) ? JSON.parse(readFileSync(MANUAL, "utf8")) : []);
+const saveManual = (j: Job[]) => { mkdirSync("data", { recursive: true }); writeFileSync(MANUAL, JSON.stringify(j, null, 2)); };
+function addManual(body: any) {
+  const url = String(body?.url ?? "").trim(), company = String(body?.company ?? "").trim().slice(0, 80), title = String(body?.title ?? "").trim().slice(0, 120), location = String(body?.location ?? "").trim().slice(0, 80);
+  if (!/^https?:\/\/\S+$/.test(url)) throw new Error("Paste the full job link, starting with https://");
+  if (!company || !title) throw new Error("Add the company name and the job title.");
+  const jobs = loadManual(), id = `me-${createHash("sha1").update(url).digest("hex").slice(0, 10)}`;
+  const job: Job = { id, source: "added by you", company, title, location, url, updated: new Date().toISOString(), description: "", flags: [] };
+  saveManual([job, ...jobs.filter((j) => j.id !== id)]);
+  return { ok: true, id };
+}
+function removeManual(body: any) { saveManual(loadManual().filter((j) => j.id !== String(body?.id ?? ""))); return { ok: true }; }
+
 async function search(q: URLSearchParams) {
   const cfg = loadSearch();
   const location = (q.get("location") ?? "").trim().slice(0, 80);
@@ -35,30 +51,37 @@ async function search(q: URLSearchParams) {
   const keywords = custom.length ? custom : cfg.titleKeywords;
 
   const boards = await cached("boards", refresh, fetchBoards);
-  const extra = adzunaKeys() ? await cached(`adzuna|${location.toLowerCase()}|${keywords.join(",")}`, refresh, (e) => adzuna(location, keywords, cfg.maxAgeDays, e)) : null;
+  const key = `${location.toLowerCase()}|${keywords.join(",")}`;
+  const extra = [
+    adzunaKeys() ? await cached(`adzuna|${key}`, refresh, (e) => adzuna(location, keywords, cfg.maxAgeDays, e)) : null,
+    reedKey() ? await cached(`reed|${key}`, refresh, (e) => reed(location, keywords, e)) : null,
+  ].filter((x) => !!x);
   const pool = [
     ...boards.jobs.filter((j) => matchesLocation(j, location, remote)),
-    ...(extra?.jobs ?? []), // Adzuna already searched around the location
+    ...extra.flatMap((x) => x.jobs), // Adzuna and Reed already searched around the location
   ].filter((j) => matchesTitle(j, keywords) && isRecent(j, cfg.maxAgeDays));
   const seen = new Set<string>();
-  const matches = pool.filter((j) => { const k = `${j.company.toLowerCase()}|${j.title.toLowerCase()}|${j.location.toLowerCase()}`; if (seen.has(k) || seen.has(j.url)) return false; seen.add(k); seen.add(j.url); return true; });
-  for (const j of matches) { j.flags = flagsFor(`${j.title} ${j.location} ${j.description}`, cfg.excludeKeywords); known.set(j.id, j); }
+  const found = pool.filter((j) => { const k = `${j.company.toLowerCase()}|${j.title.toLowerCase()}|${j.location.toLowerCase()}`; if (seen.has(k) || seen.has(j.url)) return false; seen.add(k); seen.add(j.url); return true; });
+  found.sort((a, b) => (b.updated ? new Date(b.updated).getTime() : 0) - (a.updated ? new Date(a.updated).getTime() : 0));
+  // jobs added by hand are always listed first, whatever the location
+  const manual = loadManual().filter((m) => !seen.has(m.url));
+  const matches = [...manual, ...found];
+  for (const j of matches) { j.flags = eligibilityFlags(j.title, `${j.location} ${j.description}`, cfg.excludeKeywords); known.set(j.id, j); }
 
   const apps = loadApps();
   const fresh = matches.filter((j) => !isApplied(findApp(apps, j)));
-  fresh.sort((a, b) => (b.updated ? new Date(b.updated).getTime() : 0) - (a.updated ? new Date(a.updated).getTime() : 0));
   mkdirSync("data", { recursive: true });
-  writeFileSync("data/jobs.json", JSON.stringify(fresh, null, 2)); // keeps /batch <id> working for jobs found here
+  writeFileSync("data/jobs.json", JSON.stringify(fresh.filter((j) => j.description), null, 2)); // keeps /batch <id> working for jobs found here
 
   const companies = new Map<string, number>();
   for (const j of fresh) companies.set(j.company, (companies.get(j.company) ?? 0) + 1);
   return {
     location: isUkWide(location) ? "the UK" : location, keywords,
-    fetchedAt: Math.min(boards.at, extra?.at ?? Infinity),
+    fetchedAt: Math.min(boards.at, ...extra.map((x) => x.at)),
     hiddenApplied: matches.length - fresh.length,
-    errors: [...boards.errors, ...(extra?.errors ?? [])],
+    errors: [...boards.errors, ...extra.flatMap((x) => x.errors)],
     companies: [...companies.entries()].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-    jobs: fresh.map((j) => { const a = findApp(apps, j); return { id: j.id, source: j.source, company: j.company, title: j.title, location: j.location, url: j.url, updated: j.updated, flags: j.flags, hasDescription: j.source !== "adzuna" && j.description.length > 300, cv: cvUrl(a?.cv), notes: a?.notes ?? "" }; }),
+    jobs: fresh.map((j) => { const a = findApp(apps, j); return { id: j.id, source: j.source, company: j.company, title: j.title, location: j.location, url: j.url, updated: j.updated, flags: j.flags, manual: j.id.startsWith("me-"), hasDescription: !["adzuna", "reed"].includes(j.source) && j.description.length > 300, cv: cvUrl(a?.cv), notes: a?.notes ?? "" }; }),
   };
 }
 
@@ -80,20 +103,23 @@ async function generateCv(body: any) {
   if (!job.company || !job.title || !/^https?:\/\//.test(job.url)) throw new Error("The job needs a company, a title and a link.");
   if (jd.length < 200) throw new Error("Paste the full job description first (at least a few paragraphs).");
   const cfg = loadSearch();
-  const flags = flagsFor(`${job.title} ${jd}`, cfg.excludeKeywords);
+  // eligibility first (tailor-cv skill, section 1): do not build a flagged role unless Aditya insists
+  const flags = eligibilityFlags(job.title, jd, cfg.excludeKeywords);
+  if (flags.length && !body?.force) return { needsConfirm: true, flags };
   const master = readFileSync("cv/master_cv.json", "utf8");
   const dir = `output/ui/${slug(job.company)}-${slug(job.title)}`;
   mkdirSync(dir, { recursive: true });
   writeFileSync(`${dir}/link.txt`, job.url + "\n");
   writeFileSync(`${dir}/jd.txt`, `${job.company} | ${job.title} | ${job.location}\n${job.url}\n\n${jd}\n`);
 
+  // start with more text than usually fits and step down, so the page ends up as full as one page allows
   let result: ReturnType<typeof autoTailor> | undefined, built = false, log = "";
-  for (const budget of [2600, 2350, 2100, 1850, 1600]) {
+  for (const budget of [3100, 2850, 2600, 2350, 2100, 1850, 1600]) {
     result = autoTailor(master, jd, job, budget);
     writeFileSync(`${dir}/keywords.md`, keywordsMd(result.report.rows, result.report.score, flags));
     writeFileSync(`${dir}/tailor.json`, JSON.stringify(result.tailor, null, 2));
     const summary = `Match ${result.report.score}%. ${result.missing.length ? `Missing: ${result.missing.slice(0, 6).join(", ")}` : "No missing keywords found"}.${flags.length ? ` FLAGS: ${flags.join(", ")}.` : ""}`;
-    writeFileSync(`${dir}/notes.md`, `${summary}\n\nBuilt by the web UI with rule-based tailoring (bullets, skills and profile selected from the master CV).\n\n## Keywords in the job description that are not in the master CV\n${result.missing.map((m) => `- ${m}`).join("\n") || "- none"}\n`);
+    writeFileSync(`${dir}/notes.md`, `${summary}\n\nBuilt by the web UI with rule-based tailoring (bullets, skills and profile selected from the master CV). For bullet rewrites and reframing, ask Claude Code to refine this folder with the tailor-cv skill.\n\n## Keywords in the job description that are not in the master CV\n${result.missing.map((m) => `- ${m}`).join("\n") || "- none"}\n`);
     const r = await runBuild(dir);
     log = r.out.trim();
     if (r.code === 0) { built = true; break; }
@@ -109,7 +135,9 @@ async function generateCv(body: any) {
   if (a) Object.assign(a, { cv: pdf, notes, id: a.id ?? (job.id || undefined) });
   else apps.push({ date: today(), company: job.company, role: job.title, url: job.url, status: "drafted", notes, cv: pdf, id: job.id || undefined });
   saveApps(apps);
-  return { cv: cvUrl(pdf), folder: dir, score: result.report.score, matched: result.matched, missing: result.missing, flags, title: result.tailor.title, notes };
+  const final = readFileSync(`${dir}/cv.json`, "utf8");
+  const warnings = [/[—;]/.test(final) ? "The CV text contains an em dash or a semicolon, check cv/master_cv.json." : "", /Shopping Assistant/.test(final) && !/Shopping Assistant \(in development\)/.test(final) ? "The Shopping Assistant is not labelled (in development)." : ""].filter(Boolean);
+  return { cv: cvUrl(pdf), font: log.match(/font ([\d.]+pt)/)?.[1] ?? "", warnings, folder: dir, score: result.report.score, matched: result.matched, missing: result.missing, flags, title: result.tailor.title, notes };
 }
 
 function setApplied(body: any) {
@@ -148,7 +176,7 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && path === "/") { res.writeHead(200, { "Content-Type": TYPES[".html"], "Cache-Control": "no-store" }); return res.end(readFileSync("ui/index.html")); }
     if (req.method === "GET" && path === "/api/config") {
       const c = loadCompanies(), s = loadSearch();
-      return json(res, 200, { titleKeywords: s.titleKeywords, places: UK_PLACES, adzuna: !!adzunaKeys(), boards: c.greenhouse.length + c.lever.length + c.ashby.length });
+      return json(res, 200, { titleKeywords: s.titleKeywords, places: UK_PLACES, adzuna: !!adzunaKeys(), reed: !!reedKey(), boards: c.greenhouse.length + c.lever.length + c.ashby.length });
     }
     if (req.method === "GET" && path === "/api/search") return json(res, 200, await search(url.searchParams));
     if (req.method === "GET" && path === "/api/description") {
@@ -157,6 +185,8 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && path === "/api/applications") return json(res, 200, { applications: loadApps().map((a) => ({ ...a, cv: cvUrl(a.cv) })).reverse() });
     if (req.method === "POST" && path === "/api/cv") { const body = await readBody(req); const r = await (queue = queue.catch(() => {}).then(() => generateCv(body))); return json(res, 200, r); }
+    if (req.method === "POST" && path === "/api/jobs") return json(res, 200, addManual(await readBody(req)));
+    if (req.method === "POST" && path === "/api/jobs/remove") return json(res, 200, removeManual(await readBody(req)));
     if (req.method === "POST" && path === "/api/applied") return json(res, 200, setApplied(await readBody(req)));
     if (req.method === "GET" && path.startsWith("/files/")) {
       const root = resolve("output"), file = resolve(root, decodeURIComponent(path.slice("/files/".length)));
@@ -167,4 +197,4 @@ const server = createServer(async (req, res) => {
     json(res, 404, { error: "Not found" });
   } catch (e) { json(res, 400, { error: (e as Error).message }); }
 });
-server.listen(PORT, "127.0.0.1", () => console.log(`Job Pilot UI: http://localhost:${PORT}\n${adzunaKeys() ? "Adzuna search is on." : "Adzuna keys not set, searching the company boards in companies.json only."}`));
+server.listen(PORT, "127.0.0.1", () => console.log(`Job Pilot UI: http://localhost:${PORT}\nSources: company boards in companies.json${adzunaKeys() ? ", Adzuna" : ""}${reedKey() ? ", Reed" : ""}.${adzunaKeys() || reedKey() ? "" : " Add Reed or Adzuna keys to .env to find more companies."}`));
