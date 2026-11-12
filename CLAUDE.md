@@ -53,6 +53,9 @@ Token rules for /batch: no browser, no long explanations, do not print whole fil
 8. **Stop before submitting.** Take a screenshot of the completed form, list every answer you entered, and say: "Ready for you to review and submit."
 9. **Log it.** Run `npm run track -- add "<Company>" "<Role>" "<URL>" drafted "<match score and gaps>" "output/<company>/<cv file>.pdf"`. When Aditya says he submitted, run `npm run track -- status "<URL>" submitted`.
 
+## Web UI (Aditya runs it himself)
+`npm run ui` serves ui/index.html from src/server.ts at http://localhost:4173. It searches by UK location, builds rule-based CVs into output/ui/<company>-<role>/ (same files as a /batch folder, so `npm run build -- <folder>` works on them) and marks applications in data/applications.json. A job with status "drafted" is still listed, any later status hides it from the UI and from `npm run fetch-jobs`.
+
 ## Workflow: /tracker
 Run `npm run track -- list` and summarise by status.
 

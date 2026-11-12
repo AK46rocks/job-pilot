@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Pilot</title>
+<style>
+  :root {
+    --bg: #f4f5f8; --card: #fff; --ink: #161b26; --muted: #5d6677; --line: #dfe3ea;
+    --accent: #1f3864; --accent-ink: #fff; --soft: #e9eef8; --ok: #17794a; --ok-soft: #e2f4ea; --warn: #9a3412; --warn-soft: #fdebdc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #11141a; --card: #1a1f29; --ink: #e8ebf1; --muted: #9aa4b5; --line: #2c3340; --accent: #8fb0ee; --accent-ink: #0d1524; --soft: #232b3a; --ok: #6fd3a0; --ok-soft: #173326; --warn: #f5a36c; --warn-soft: #3a2416; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { background: var(--card); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 5; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 16px; }
+  header .wrap { display: flex; align-items: center; gap: 20px; height: 54px; }
+  h1 { font-size: 18px; margin: 0; letter-spacing: -.01em; }
+  nav { display: flex; gap: 4px; margin-left: auto; }
+  nav button { background: none; border: 0; padding: 8px 12px; border-radius: 8px; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+  nav button[aria-selected="true"] { background: var(--soft); color: var(--ink); }
+  main { padding: 20px 0 60px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; }
+  .search { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: end; }
+  label.f { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+  input[type=text], textarea { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: inherit; }
+  input[type=text]:focus, textarea:focus, button:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; white-space: nowrap; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .btn[disabled] { opacity: .55; cursor: wait; }
+  .btn.link { border: 0; background: none; padding: 0; color: var(--accent); font-weight: 600; }
+  .opts { display: flex; flex-wrap: wrap; gap: 14px 22px; margin-top: 12px; align-items: center; font-size: 14px; color: var(--muted); }
+  .opts label { display: inline-flex; gap: 6px; align-items: center; cursor: pointer; }
+  details.kw { margin-top: 12px; font-size: 14px; }
+  details.kw summary { cursor: pointer; color: var(--muted); }
+  details.kw input { margin-top: 8px; }
+  .hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+  .status { margin: 18px 2px 10px; color: var(--muted); font-size: 14px; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  .status strong { color: var(--ink); }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+  .chip { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 5px 11px; border-radius: 999px; font: inherit; font-size: 13px; cursor: pointer; }
+  .chip span { color: var(--muted); margin-left: 4px; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .chip[aria-pressed="true"] span { color: inherit; opacity: .8; }
+  .job { display: grid; grid-template-columns: 1fr auto; gap: 8px 16px; margin-bottom: 10px; align-items: center; }
+  .job.applied { opacity: .55; }
+  .job.applied h3 { text-decoration: line-through; }
+  .job h3 { margin: 0 0 2px; font-size: 16px; overflow-wrap: anywhere; }
+  .meta { color: var(--muted); font-size: 13.5px; overflow-wrap: anywhere; }
+  .meta b { color: var(--ink); font-weight: 600; }
+  .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  .badge { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; background: var(--soft); color: var(--muted); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .badge.ok { background: var(--ok-soft); color: var(--ok); }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+  .check { display: inline-flex; align-items: center; gap: 7px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; font-weight: 600; user-select: none; }
+  .check input { width: 17px; height: 17px; accent-color: var(--ok); margin: 0; }
+  .check:has(input:checked) { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
+  .empty { text-align: center; color: var(--muted); padding: 40px 16px; }
+  .errors { margin-top: 10px; font-size: 13px; color: var(--warn); }
+  .errors summary { cursor: pointer; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+  .tablewrap { overflow-x: auto; padding: 4px; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(720px, calc(100vw - 24px)); background: var(--card); color: var(--ink); }
+  dialog::backdrop { background: rgba(10, 14, 22, .55); }
+  .dlg { padding: 20px; }
+  .dlg h2 { margin: 0 0 2px; font-size: 18px; }
+  .dlg textarea { min-height: 260px; resize: vertical; margin-top: 12px; font-size: 14px; }
+  .dlg .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
+  .dlg .row .grow { flex: 1; }
+  .result { margin-top: 16px; padding: 14px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line); }
+  .result h4 { margin: 10px 0 4px; font-size: 13px; color: var(--muted); }
+  .score { font-size: 22px; font-weight: 700; }
+  .terms { display: flex; flex-wrap: wrap; gap: 5px; }
+  .msg { margin-top: 12px; padding: 10px 12px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 14px; }
+  .toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 10px 16px; border-radius: 10px; font-weight: 600; max-width: calc(100vw - 32px); }
+  [hidden] { display: none !important; }
+  @media (max-width: 640px) {
+    .search { grid-template-columns: 1fr; }
+    .job { grid-template-columns: 1fr; }
+    .actions { justify-content: flex-start; }
+  }
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <h1>Job Pilot</h1>
+  <nav role="tablist">
+    <button role="tab" id="tab-find" aria-selected="true">Find jobs</button>
+    <button role="tab" id="tab-applied" aria-selected="false">Applied <span id="applied-count"></span></button>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <section id="view-find">
+    <form class="card" id="search-form">
+      <div class="search">
+        <div>
+          <label class="f" for="location">Location in the UK</label>
+          <input type="text" id="location" list="places" placeholder="Coventry, London, Manchester... or UK for everywhere" autocomplete="off">
+          <datalist id="places"></datalist>
+        </div>
+        <button class="btn primary" id="search-btn" type="submit">Search jobs</button>
+      </div>
+      <div class="opts">
+        <label><input type="checkbox" id="remote" checked> Include UK remote roles</label>
+        <label><input type="checkbox" id="hide-flagged"> Hide flagged roles</label>
+        <button class="btn link" type="button" id="refresh-btn">Fetch fresh results</button>
+      </div>
+      <details class="kw">
+        <summary>My field (job title keywords)</summary>
+        <input type="text" id="keywords" aria-label="Job title keywords, comma separated">
+        <p class="hint">Comma separated. A role is listed when its title contains any of these. Defaults come from profile/search.json.</p>
+      </details>
+      <p class="hint" id="source-hint"></p>
+    </form>
+
+    <div class="status" id="status" aria-live="polite"></div>
+    <div class="chips" id="companies"></div>
+    <div id="jobs"></div>
+  </section>
+
+  <section id="view-applied" hidden>
+    <div class="card tablewrap">
+      <table>
+        <thead><tr><th>Date</th><th>Company</th><th>Role</th><th>Status</th><th>CV</th><th></th></tr></thead>
+        <tbody id="apps"></tbody>
+      </table>
+      <div class="empty" id="apps-empty" hidden>Nothing here yet. Tick "Applied" on a job after you submit it.</div>
+    </div>
+  </section>
+</main>
+
+<dialog id="cv-dialog">
+  <form class="dlg" id="cv-form">
+    <h2>Generate CV</h2>
+    <div class="meta" id="cv-job"></div>
+    <label class="f" for="jd" style="margin-top:14px">Paste the full job description</label>
+    <textarea id="jd" placeholder="Open the job link, copy the whole description and paste it here." required></textarea>
+    <div class="row">
+      <button class="btn link" type="button" id="use-fetched" hidden>Use the description from the job board</button>
+      <span class="grow"></span>
+      <button class="btn" type="button" id="cv-close">Close</button>
+      <button class="btn primary" type="submit" id="cv-submit">Generate CV</button>
+    </div>
+    <div class="msg" id="cv-error" hidden></div>
+    <div class="result" id="cv-result" hidden></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const el = (tag, props = {}, ...kids) => { const n = Object.assign(document.createElement(tag), props); for (const k of kids) n.append(k); return n; };
+const store = { get: (k, d) => { try { return localStorage.getItem(k) ?? d; } catch { return d; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
+const api = async (path, body) => {
+  const res = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : undefined);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  return data;
+};
+const toast = (text) => { const t = $("toast"); t.textContent = text; t.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 3200); };
+const ago = (iso) => { if (!iso) return ""; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 864e5); return isNaN(d) ? "" : d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`; };
+const safeUrl = (u) => (/^https?:\/\//i.test(u) ? u : "#");
+
+let state = { jobs: [], company: "", result: null, defaults: [] };
+
+// ---------- search ----------
+async function runSearch(refresh) {
+  const location = $("location").value.trim();
+  store.set("jp.location", location); store.set("jp.remote", $("remote").checked ? "1" : "0"); store.set("jp.keywords", $("keywords").value.trim());
+  const typed = $("keywords").value.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const custom = typed.join(",") !== state.defaults.join(",") ? typed.join(",") : "";
+  const q = new URLSearchParams({ location, remote: $("remote").checked ? "1" : "0" });
+  if (custom) q.set("keywords", custom);
+  if (refresh) q.set("refresh", "1");
+  $("search-btn").disabled = true; $("search-btn").textContent = "Searching...";
+  $("status").textContent = "Fetching roles from the job boards, this can take a few seconds.";
+  try {
+    state.result = await api(`/api/search?${q}`);
+    state.jobs = state.result.jobs; state.company = "";
+    render();
+  } catch (e) { $("status").textContent = ""; $("jobs").replaceChildren(el("div", { className: "card empty", textContent: `Search failed: ${e.message}` })); $("companies").replaceChildren(); }
+  finally { $("search-btn").disabled = false; $("search-btn").textContent = "Search jobs"; }
+}
+
+function render() {
+  const r = state.result; if (!r) return;
+  const hideFlagged = $("hide-flagged").checked;
+  const visible = state.jobs.filter((j) => (!state.company || j.company === state.company) && !(hideFlagged && j.flags.length));
+  const mins = Math.max(0, Math.round((Date.now() - r.fetchedAt) / 60000));
+  const status = $("status"); status.replaceChildren();
+  status.append(el("span", {}, el("strong", { textContent: `${state.jobs.length} ${state.jobs.length === 1 ? "role" : "roles"}` }), ` at ${r.companies.length} ${r.companies.length === 1 ? "company" : "companies"} in ${r.location}`));
+  if (r.hiddenApplied) status.append(el("span", { textContent: `${r.hiddenApplied} already applied, hidden` }));
+  status.append(el("span", { textContent: mins < 1 ? "fetched just now" : `fetched ${mins} min ago` }));
+  if (r.errors.length) {
+    const d = el("details", { className: "errors" }, el("summary", { textContent: `${r.errors.length} ${r.errors.length === 1 ? "source" : "sources"} could not be reached` }));
+    d.append(el("div", { textContent: r.errors.join("\n"), style: "white-space:pre-wrap" })); status.append(d);
+  }
+
+  const chips = $("companies"); chips.replaceChildren();
+  if (r.companies.length > 1) {
+    const chip = (name, count) => { const b = el("button", { className: "chip", type: "button" }, name || "All companies", el("span", { textContent: count })); b.setAttribute("aria-pressed", String(state.company === name)); b.onclick = () => { state.company = name; render(); }; return b; };
+    chips.append(chip("", state.jobs.length), ...r.companies.map((c) => chip(c.name, c.count)));
+  }
+
+  const list = $("jobs"); list.replaceChildren();
+  if (!visible.length) {
+    list.append(el("div", { className: "card empty", textContent: state.jobs.length ? "No roles match these filters." : `No open roles in your field were found in ${r.location}. Try a nearby city, "UK", or add more companies to companies.json.` }));
+    return;
+  }
+  for (const j of visible) list.append(jobCard(j));
+}
+
+function jobCard(j) {
+  const card = el("article", { className: "card job" + (j.applied ? " applied" : "") });
+  const info = el("div", {}, el("h3", { textContent: j.title }));
+  const meta = el("div", { className: "meta" }, el("b", { textContent: j.company }), ` · ${j.location || "Location not given"}`);
+  if (j.updated) meta.append(` · ${ago(j.updated)}`);
+  meta.append(` · ${j.source}`);
+  info.append(meta);
+  const badges = el("div", { className: "badges" });
+  for (const f of j.flags) badges.append(el("span", { className: "badge warn", textContent: `Flag: ${f}`, title: "Matches a skip rule in profile/search.json. Check eligibility before applying." }));
+  if (j.cv) badges.append(el("span", { className: "badge ok", textContent: j.notes ? `CV ready · ${j.notes.split(",")[0]}` : "CV ready" }));
+  if (badges.children.length) info.append(badges);
+
+  const actions = el("div", { className: "actions" });
+  actions.append(el("a", { className: "btn", href: safeUrl(j.url), target: "_blank", rel: "noopener noreferrer", textContent: "Open job link ↗" }));
+  if (j.cv) actions.append(el("a", { className: "btn", href: j.cv, target: "_blank", textContent: "Open CV" }));
+  const gen = el("button", { className: "btn primary", type: "button", textContent: j.cv ? "Regenerate CV" : "Generate CV" });
+  gen.onclick = () => openCv(j);
+  const box = el("input", { type: "checkbox", checked: !!j.applied });
+  box.onchange = async () => {
+    box.disabled = true;
+    try { await api("/api/applied", { job: j, applied: box.checked }); j.applied = box.checked; toast(box.checked ? "Marked as applied. It will not be listed next time." : "Unmarked. It will be listed again."); loadApps(); }
+    catch (e) { box.checked = !box.checked; toast(e.message); }
+    render();
+  };
+  actions.append(gen, el("label", { className: "check" }, box, "Applied"));
+  card.append(info, actions);
+  return card;
+}
+
+// ---------- generate CV ----------
+let current = null;
+function openCv(j) {
+  current = j;
+  $("cv-job").textContent = `${j.title} · ${j.company}`;
+  $("jd").value = ""; $("cv-result").hidden = true; $("cv-error").hidden = true;
+  $("use-fetched").hidden = !j.hasDescription;
+  $("cv-dialog").showModal(); $("jd").focus();
+}
+$("cv-close").onclick = () => $("cv-dialog").close();
+$("use-fetched").onclick = async () => { try { $("jd").value = (await api(`/api/description?id=${encodeURIComponent(current.id)}`)).description; } catch (e) { showCvError(e.message); } };
+const showCvError = (m) => { $("cv-error").textContent = m; $("cv-error").hidden = false; };
+$("cv-form").onsubmit = async (e) => {
+  e.preventDefault();
+  const btn = $("cv-submit"); btn.disabled = true; btn.textContent = "Building the PDF, about 20 seconds...";
+  $("cv-error").hidden = true; $("cv-result").hidden = true;
+  try {
+    const r = await api("/api/cv", { job: current, jd: $("jd").value });
+    current.cv = r.cv; current.notes = r.notes;
+    const box = $("cv-result"); box.replaceChildren(); box.hidden = false;
+    box.append(el("div", { className: "score", textContent: `${r.score}% keyword match` }), el("div", { className: "meta", textContent: r.title }));
+    if (r.flags.length) box.append(el("div", { className: "msg", textContent: `Check eligibility before applying. The description mentions: ${r.flags.join(", ")}.` }));
+    const terms = (label, items, cls) => { if (!items.length) return; const t = el("div", { className: "terms" }); for (const x of items) t.append(el("span", { className: `badge ${cls}`, textContent: x })); box.append(el("h4", { textContent: label }), t); };
+    terms("In your CV", r.matched, "ok"); terms("In the job description but not in your master CV", r.missing, "warn");
+    const row = el("div", { className: "row" });
+    row.append(el("a", { className: "btn primary", href: r.cv, target: "_blank", textContent: "Open CV PDF" }), el("a", { className: "btn", href: safeUrl(current.url), target: "_blank", rel: "noopener noreferrer", textContent: "Open job link ↗" }), el("span", { className: "meta", textContent: `Saved in ${r.folder}` }));
+    box.append(row);
+    render(); loadApps();
+  } catch (err) { showCvError(err.message); }
+  finally { btn.disabled = false; btn.textContent = "Generate CV"; }
+};
+
+// ---------- applied tab ----------
+async function loadApps() {
+  try {
+    const { applications } = await api("/api/applications");
+    const applied = applications.filter((a) => a.status !== "drafted");
+    $("applied-count").textContent = applied.length ? `(${applied.length})` : "";
+    const body = $("apps"); body.replaceChildren();
+    $("apps-empty").hidden = applications.length > 0;
+    for (const a of applications) {
+      const tr = el("tr", {}, el("td", { textContent: a.date }), el("td", { textContent: a.company }), el("td", {}, el("a", { href: safeUrl(a.url), target: "_blank", rel: "noopener noreferrer", textContent: a.role })),
+        el("td", {}, el("span", { className: "badge " + (a.status === "drafted" ? "" : "ok"), textContent: a.status === "drafted" ? "CV drafted" : a.status })),
+        el("td", {}, a.cv ? el("a", { href: a.cv, target: "_blank", textContent: "PDF" }) : ""));
+      const btn = el("button", { className: "btn link", type: "button", textContent: a.status === "drafted" ? "Mark applied" : "Undo" });
+      btn.onclick = async () => { try { await api("/api/applied", { job: { id: a.id, company: a.company, title: a.role, url: a.url }, applied: a.status === "drafted" }); loadApps(); } catch (e) { toast(e.message); } };
+      tr.append(el("td", {}, btn)); body.append(tr);
+    }
+  } catch (e) { toast(e.message); }
+}
+
+// ---------- wiring ----------
+const show = (find) => { $("view-find").hidden = !find; $("view-applied").hidden = find; $("tab-find").setAttribute("aria-selected", String(find)); $("tab-applied").setAttribute("aria-selected", String(!find)); if (!find) loadApps(); };
+$("tab-find").onclick = () => show(true); $("tab-applied").onclick = () => show(false);
+$("search-form").onsubmit = (e) => { e.preventDefault(); runSearch(false); };
+$("refresh-btn").onclick = () => runSearch(true);
+$("hide-flagged").onchange = render;
+
+(async () => {
+  $("location").value = store.get("jp.location", ""); $("remote").checked = store.get("jp.remote", "1") === "1";
+  try {
+    const c = await api("/api/config");
+    state.defaults = c.titleKeywords.map((k) => k.toLowerCase());
+    $("keywords").value = store.get("jp.keywords", "") || c.titleKeywords.join(", ");
+    for (const p of ["UK", ...c.places]) $("places").append(el("option", { value: p }));
+    $("source-hint").textContent = c.adzuna
+      ? `Searching ${c.boards} company boards from companies.json plus Adzuna for other companies near the location.`
+      : `Searching the ${c.boards} company boards in companies.json. To also discover other companies near any UK town, add free Adzuna keys to a .env file (see README).`;
+  } catch (e) { $("source-hint").textContent = e.message; }
+  loadApps();
+  if ($("location").value) runSearch(false);
+})();
+</script>
+</body>
+</html>
