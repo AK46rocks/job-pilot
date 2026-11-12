@@ -9,5 +9,6 @@ export const TERMS = [
   "LLM","LLMs","AI agents","agents","agentic","RAG","tool calling","function calling","MCP","LangChain","LangGraph","OpenAI","Anthropic","Claude","Claude Code","Cursor","Codex","prompt engineering","evaluation","evals","embeddings","structured output",
   "accessibility","WCAG","responsive design","performance","Lighthouse","SEO","server-side rendering","SSR","design systems","component library","Figma","UX","UI",
   "OAuth","OAuth2","JWT","SSO","authentication","RBAC","role-based access control","encryption","security","GDPR",
-  "Agile","Scrum","Kanban","Jira","code review","code reviews","observability","monitoring","logging","Grafana","Datadog","Stripe","payments","fintech","SaaS","B2B","startup"
+  "Agile","Scrum","Kanban","Jira","code review","code reviews","observability","monitoring","logging","Grafana","Datadog","Stripe","payments","fintech","SaaS","B2B","startup",
+  "dashboards","dashboard","data tables","charts","data visualisation","data visualization","analytics","D3.js","Core Web Vitals","Storybook","Redux Toolkit","React Native","mentoring","stakeholders","end to end","end-to-end","documentation","Web3","blockchain"
 ];

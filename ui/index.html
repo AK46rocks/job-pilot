@@ -75,7 +75,11 @@
   dialog { border: 1px solid var(--line); border-radius: 14px; padding: 0; width: min(720px, calc(100vw - 24px)); background: var(--card); color: var(--ink); }
   dialog::backdrop { background: rgba(10, 14, 22, .55); }
   .dlg { padding: 20px; }
-  .dlg h2 { margin: 0 0 2px; font-size: 18px; }
+  .dlg h2 { margin: 0 44px 2px 0; font-size: 18px; }
+  dialog { max-height: calc(100vh - 24px); overflow-y: auto; }
+  .dlg { position: relative; }
+  .x { position: sticky; top: 0; float: right; margin: -8px -8px 0 0; width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 22px; line-height: 1; cursor: pointer; z-index: 2; }
+  .x:hover { border-color: var(--accent); }
   .dlg textarea { min-height: 260px; resize: vertical; margin-top: 12px; font-size: 14px; }
   .dlg .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 12px; }
   .dlg .row .grow { flex: 1; }
@@ -159,6 +163,7 @@
 
 <dialog id="cv-dialog">
   <form class="dlg" id="cv-form">
+    <button class="x" type="button" id="cv-x" aria-label="Close">×</button>
     <h2>Generate CV</h2>
     <div class="meta" id="cv-job"></div>
     <label class="f" for="jd" style="margin-top:14px">Paste the full job description</label>
@@ -187,7 +192,7 @@ const api = async (path, body) => {
   if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
   return data;
 };
-const toast = (text) => { const t = $("toast"); t.textContent = text; t.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 3200); };
+const toast = (text) => { const t = $("toast"); ($("cv-dialog").open ? $("cv-dialog") : document.body).append(t); t.textContent = text; t.hidden = false; clearTimeout(toast.timer); toast.timer = setTimeout(() => (t.hidden = true), 3200); };
 const ago = (iso) => { if (!iso) return ""; const d = Math.floor((Date.now() - new Date(iso).getTime()) / 864e5); return isNaN(d) ? "" : d <= 0 ? "today" : d === 1 ? "yesterday" : `${d} days ago`; };
 const safeUrl = (u) => (/^https?:\/\//i.test(u) ? u : "#");
 
@@ -240,6 +245,19 @@ function render() {
   for (const j of visible) list.append(jobCard(j));
 }
 
+// the "Applied" tick, used on each job card and in the Generate CV dialog
+function appliedCheck(j) {
+  const box = el("input", { type: "checkbox", checked: !!j.applied });
+  box.onchange = async () => {
+    box.disabled = true;
+    try { await api("/api/applied", { job: j, applied: box.checked }); j.applied = box.checked; toast(box.checked ? "Marked as applied. It will not be listed next time." : "Unmarked. It will be listed again."); loadApps(); }
+    catch (e) { box.checked = !box.checked; toast(e.message); }
+    box.disabled = false;
+    render();
+  };
+  return el("label", { className: "check" }, box, "Applied");
+}
+
 function jobCard(j) {
   const card = el("article", { className: "card job" + (j.applied ? " applied" : "") });
   const info = el("div", {}, el("h3", { textContent: j.title }));
@@ -254,17 +272,10 @@ function jobCard(j) {
 
   const actions = el("div", { className: "actions" });
   actions.append(el("a", { className: "btn", href: safeUrl(j.url), target: "_blank", rel: "noopener noreferrer", textContent: "Open job link ↗" }));
-  if (j.cv) actions.append(el("a", { className: "btn", href: j.cv, target: "_blank", textContent: "Open CV" }));
+  if (j.cv) actions.append(el("a", { className: "btn", href: j.cv, download: "", textContent: "Download CV ↓" }));
   const gen = el("button", { className: "btn primary", type: "button", textContent: j.cv ? "Regenerate CV" : "Generate CV" });
   gen.onclick = () => openCv(j);
-  const box = el("input", { type: "checkbox", checked: !!j.applied });
-  box.onchange = async () => {
-    box.disabled = true;
-    try { await api("/api/applied", { job: j, applied: box.checked }); j.applied = box.checked; toast(box.checked ? "Marked as applied. It will not be listed next time." : "Unmarked. It will be listed again."); loadApps(); }
-    catch (e) { box.checked = !box.checked; toast(e.message); }
-    render();
-  };
-  actions.append(gen, el("label", { className: "check" }, box, "Applied"));
+  actions.append(gen, appliedCheck(j));
   if (j.manual) { const rm = el("button", { className: "btn link", type: "button", textContent: "Remove" }); rm.onclick = async () => { try { await api("/api/jobs/remove", { id: j.id }); state.jobs = state.jobs.filter((x) => x !== j); render(); } catch (e) { toast(e.message); } }; actions.append(rm); }
   card.append(info, actions);
   return card;
@@ -279,7 +290,7 @@ function openCv(j) {
   $("use-fetched").hidden = !j.hasDescription;
   $("cv-dialog").showModal(); $("jd").focus();
 }
-$("cv-close").onclick = () => $("cv-dialog").close();
+$("cv-close").onclick = $("cv-x").onclick = () => $("cv-dialog").close();
 $("use-fetched").onclick = async () => { try { $("jd").value = (await api(`/api/description?id=${encodeURIComponent(current.id)}`)).description; } catch (e) { showCvError(e.message); } };
 const showCvError = (m) => { $("cv-error").textContent = m; $("cv-error").hidden = false; };
 let force = false, useAi = false;
@@ -309,7 +320,7 @@ $("cv-form").onsubmit = async (e) => {
     if (r.report) box.append(el("h4", { textContent: "Claude's report" }), el("div", { className: "report", textContent: r.report }));
     terms("In your CV", r.matched, "ok"); terms("In the job description but not in your master CV", r.missing, "warn");
     const row = el("div", { className: "row" });
-    row.append(el("a", { className: "btn primary", href: r.cv, target: "_blank", textContent: "Open CV PDF" }), el("a", { className: "btn", href: safeUrl(current.url), target: "_blank", rel: "noopener noreferrer", textContent: "Open job link ↗" }), el("span", { className: "meta", textContent: `Saved in ${r.folder}` }));
+    row.append(el("a", { className: "btn primary", href: r.cv, download: "", textContent: "Download CV ↓" }), appliedCheck(current), el("a", { className: "btn", href: safeUrl(current.url), target: "_blank", rel: "noopener noreferrer", textContent: "Open job link ↗" }), el("span", { className: "meta", textContent: `Saved in ${r.folder}` }));
     box.append(row);
     render(); loadApps();
   } catch (err) { showCvError(err.message); }

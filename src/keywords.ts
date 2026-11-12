@@ -18,13 +18,14 @@ export function mentions(text: string, term: string): boolean {
 export function keywordReport(jd: string, master = readFileSync("cv/master_cv.json", "utf8")) {
   const cv = master.toLowerCase();
   const found = new Map<string, number>();
-  for (const t of TERMS) {
-    const n = (jd.match(boundary(t, "g")) ?? []).length;
+  // longest terms first, and each match is blanked out, so "React Testing Library" or "React.js" is not also counted as "React"
+  let text = jd;
+  for (const t of [...TERMS].sort((a, b) => b.length - a.length)) {
+    let n = 0;
+    text = text.replace(boundary(t, "g"), (m, lead: string) => { n++; return lead + " ".repeat(m.length - lead.length); });
     if (n) found.set(t, n);
   }
-  // drop shorter terms fully covered by a longer exact term (e.g. React when only React.js appears)
-  for (const t of [...found.keys()]) for (const u of found.keys()) if (u !== t && u.includes(t) && found.get(u)! >= found.get(t)!) found.delete(t);
-  const rows = [...found.entries()].sort((a, b) => b[1] - a[1]).map(([t, n]) => ({ term: t, count: n, inMaster: mentions(cv, t) }));
+  const rows = [...found.entries()].sort((a, b) => b[1] - a[1] || TERMS.indexOf(a[0]) - TERMS.indexOf(b[0])).map(([t, n]) => ({ term: t, count: n, inMaster: mentions(cv, t) }));
   const matched = rows.filter((r) => r.inMaster).length;
   return { rows, score: rows.length ? Math.round((matched / rows.length) * 100) : 0 };
 }
